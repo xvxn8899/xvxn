@@ -104,29 +104,77 @@
 <script>
     window.onload = function() {
         var links = document.querySelectorAll('.links a');
-        
-        links.forEach(function(link) {
-            var url = link.getAttribute('href');
-            var statusText = link.querySelector('i');
-            var attemptCount = 0;
+        var MAX_CONCURRENT_REQUESTS = 5; // 最大并发请求数量
 
-            // 创建一个图片元素来加载favicon.ico
-            var img = new Image();
-            img.onerror = function() {
-                attemptCount++;
-                if (attemptCount === 3) {
+        function checkLink(url, statusText) {
+            return new Promise(function(resolve) {
+                var img = new Image();
+                var timestamp = Date.now(); // 当前时间戳
+                var timeout = setTimeout(function() {
+                    statusText.innerText = '超时';
+                    statusText.style.color = 'orange'; // 修改超时状态颜色为黄色
+                    resolve();
+                }, 10000); // 设置10秒超时
+
+                img.onload = function() {
+                    clearTimeout(timeout);
+                    statusText.innerText = '正常';
+                    statusText.style.color = 'green';
+                    resolve();
+                };
+
+                img.onerror = function() {
+                    clearTimeout(timeout);
                     statusText.innerText = '异常';
                     statusText.style.color = 'red';
-                } else {
-                    img.src = url + '/favicon.ico'; // 再次尝试加载
+                    resolve();
+                };
+
+                img.src = url + '/favicon.ico?' + timestamp; // 添加时间戳
+            });
+        }
+
+        function loadLinksSequentially(links) {
+            var index = 0;
+
+            function next() {
+                if (index < links.length) {
+                    var link = links[index++];
+                    var url = link.getAttribute('href');
+                    var statusText = link.querySelector('i');
+                    checkLink(url, statusText).then(next);
                 }
-            };
-            img.onload = function() {
-                statusText.innerText = '正常';
-                statusText.style.color = 'green';
-            };
-            img.src = url + '/favicon.ico'; // 初始加载
-        });
+            }
+
+            next();
+        }
+
+        function loadLinksConcurrently(links) {
+            var index = 0;
+            var activeRequests = 0;
+
+            function onRequestComplete() {
+                activeRequests--;
+                if (index < links.length) {
+                    startRequest(links[index++]);
+                }
+            }
+
+            function startRequest(link) {
+                var url = link.getAttribute('href');
+                var statusText = link.querySelector('i');
+                activeRequests++;
+                checkLink(url, statusText).then(onRequestComplete);
+            }
+
+            while (activeRequests < MAX_CONCURRENT_REQUESTS && index < links.length) {
+                startRequest(links[index++]);
+            }
+        }
+
+        // 根据需求选择加载方式：顺序加载或并发加载
+        // loadLinksSequentially(links);
+        loadLinksConcurrently(links);
     };
 </script>
 
